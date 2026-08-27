@@ -12,7 +12,8 @@ export function solveHourDispatch(
   hour: number,
   gridPrice: number,
   gridCo2IntensityKg: number, // gCO2/kWh = kgCO2/MWh
-  options?: OptimizationOptions
+  options?: OptimizationOptions,
+  windCapacityFactor?: number
 ): HourDispatchResult {
   const demand = options?.demandMw ?? DEFAULT_DATACENTER_DEMAND_MW;
   const carbonPrice = options?.carbonPrice ?? DEFAULT_CARBON_PRICE;
@@ -32,10 +33,19 @@ export function solveHourDispatch(
     emissionFactor: number;
   }[] = [];
 
+  let windCFUsed: number | undefined = undefined;
+  let windAvailMw: number | undefined = undefined;
+
   for (const t of techs) {
     const effCost = t.LCOE_eur_mwh + t.additional_cost_eur_mwh + t.emission_factor_tco2_mwh * carbonPrice;
     effectiveTechCosts[t.technology] = effCost;
-    const cap = t.capacity_mw * t.capacity_factor;
+    const isWind = t.technology.toLowerCase().includes('wind');
+    const cf = isWind && windCapacityFactor !== undefined ? windCapacityFactor : t.capacity_factor;
+    const cap = t.capacity_mw * cf;
+    if (isWind) {
+      windCFUsed = cf;
+      windAvailMw = cap;
+    }
     if (cap > 0) {
       candidates.push({
         id: t.technology,
@@ -89,6 +99,8 @@ export function solveHourDispatch(
     gridCo2Intensity: gridCo2_tMwh,
     gridEffectiveCost,
     gridImport,
+    windCapacityFactor: windCFUsed,
+    windAvailableMw: windAvailMw,
     generation,
     totalGeneration: totalGen,
     totalCost,
@@ -105,25 +117,27 @@ export function computeProfileSummary(
   const hours = Array.from({ length: 24 }, (_, i) => i);
   let title = '';
   let description = '';
-  let hourlyAverages: { hour: number; price: number; co2Kg: number }[] = [];
+  let hourlyAverages: { hour: number; price: number; co2Kg: number; windCF: number }[] = [];
 
   if (profileType === 'annual') {
     title = 'Annual Average Profile';
-    description = 'Average of all 8,760 hourly observations across the entire year for each hour of the day (00:00–23:00).';
+    description = 'Average of all 8,760 hourly observations (price, grid CO2, wind CF) across the entire year for each hour of the day (00:00–23:00).';
     hourlyAverages = hours.map((h) => {
       const records = ANNUAL_8760_DATA.filter((r) => r.Hour === h);
       const avgPrice = records.reduce((s, r) => s + r.Price, 0) / (records.length || 1);
       const avgCo2 = records.reduce((s, r) => s + r.CO2_Intensity, 0) / (records.length || 1);
-      return { hour: h, price: avgPrice, co2Kg: avgCo2 };
+      const avgWindCF = records.reduce((s, r) => s + r.Wind_Capacity_Factor, 0) / (records.length || 1);
+      return { hour: h, price: avgPrice, co2Kg: avgCo2, windCF: avgWindCF };
     });
   } else if (profileType === 'summer') {
     title = 'Seasonal Average Profile (Summer)';
-    description = 'Average of hourly observations during the summer months (June, July, August) for each hour of the day.';
+    description = 'Average of hourly observations during summer months (June, July, August) for each hour of the day.';
     hourlyAverages = hours.map((h) => {
       const records = ANNUAL_8760_DATA.filter((r) => r.Season === 'Summer' && r.Hour === h);
       const avgPrice = records.reduce((s, r) => s + r.Price, 0) / (records.length || 1);
       const avgCo2 = records.reduce((s, r) => s + r.CO2_Intensity, 0) / (records.length || 1);
-      return { hour: h, price: avgPrice, co2Kg: avgCo2 };
+      const avgWindCF = records.reduce((s, r) => s + r.Wind_Capacity_Factor, 0) / (records.length || 1);
+      return { hour: h, price: avgPrice, co2Kg: avgCo2, windCF: avgWindCF };
     });
   } else if (profileType === 'august') {
     title = 'Monthly Average Profile (August)';
@@ -132,7 +146,8 @@ export function computeProfileSummary(
       const records = ANNUAL_8760_DATA.filter((r) => r.Month === 8 && r.Hour === h);
       const avgPrice = records.reduce((s, r) => s + r.Price, 0) / (records.length || 1);
       const avgCo2 = records.reduce((s, r) => s + r.CO2_Intensity, 0) / (records.length || 1);
-      return { hour: h, price: avgPrice, co2Kg: avgCo2 };
+      const avgWindCF = records.reduce((s, r) => s + r.Wind_Capacity_Factor, 0) / (records.length || 1);
+      return { hour: h, price: avgPrice, co2Kg: avgCo2, windCF: avgWindCF };
     });
   } else {
     title = 'Daily Profile (August 27)';
@@ -144,12 +159,13 @@ export function computeProfileSummary(
         hour: h,
         price: rec ? rec.Price : 0,
         co2Kg: rec ? rec.CO2_Intensity : 0,
+        windCF: rec ? rec.Wind_Capacity_Factor : 0,
       };
     });
   }
 
   const hourlyResults: HourDispatchResult[] = hourlyAverages.map((ha) =>
-    solveHourDispatch(ha.hour, ha.price, ha.co2Kg, options)
+    solveHourDispatch(ha.hour, ha.price, ha.co2Kg, options, ha.windCF)
   );
 
   let total24hCost = 0;
@@ -205,6 +221,8 @@ export interface AnnualHeatmapData {
       costPerMwh: number; // in €/MWh
       gridImportMw: number;
       onsiteGenerationMw: number;
+      windCapacityFactor: number;
+      windAvailableMw?: number;
     }[];
   }[];
   minGridCost: number;
@@ -244,7 +262,7 @@ export function computeAnnualHeatmapData(options?: OptimizationOptions): AnnualH
     const dateLabel = `${monthNames[first.Month - 1]} ${first.Day}`;
 
     const hours = recs.map((r) => {
-      const dispatch = solveHourDispatch(r.Hour, r.Price, r.CO2_Intensity, options);
+      const dispatch = solveHourDispatch(r.Hour, r.Price, r.CO2_Intensity, options, r.Wind_Capacity_Factor);
       const gridEff = dispatch.gridEffectiveCost;
       const optCost = dispatch.totalCost;
       const costPerMwh = dispatch.avgCostPerMwh;
@@ -266,6 +284,8 @@ export function computeAnnualHeatmapData(options?: OptimizationOptions): AnnualH
         costPerMwh,
         gridImportMw: dispatch.gridImport,
         onsiteGenerationMw: dispatch.totalGeneration,
+        windCapacityFactor: r.Wind_Capacity_Factor,
+        windAvailableMw: dispatch.windAvailableMw,
       };
     });
 

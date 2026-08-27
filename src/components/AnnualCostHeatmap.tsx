@@ -11,7 +11,7 @@ interface Props {
   grids: GridParam[];
 }
 
-type HeatmapMode = 'optimized_cost' | 'grid_effective_cost' | 'grid_price' | 'grid_co2';
+type HeatmapMode = 'optimized_cost' | 'grid_effective_cost' | 'grid_price' | 'grid_co2' | 'wind_cf';
 
 export const AnnualCostHeatmap: React.FC<Props> = ({
   demandMw,
@@ -31,6 +31,8 @@ export const AnnualCostHeatmap: React.FC<Props> = ({
     gridCo2: number;
     gridEffCost: number;
     optCost: number;
+    windCF: number;
+    windAvail?: number;
   } | null>(null);
 
   const [selectedDay, setSelectedDay] = useState<number>(239); // Day 239 is August 27
@@ -46,7 +48,14 @@ export const AnnualCostHeatmap: React.FC<Props> = ({
     const range = Math.max(max - min, 0.001);
     const t = Math.max(0, Math.min(1, (value - min) / range));
 
-    // Custom colormaps: Viridis-inspired for costs, cool to warm
+    if (metricMode === 'wind_cf') {
+      // Dark slate-navy (0%) to Deep Teal to Emerald to Bright Green-Yellow (100%)
+      const r = Math.round(15 + t * (52 - 15) + (t > 0.5 ? (t - 0.5) * 2 * (167 - 52) : 0));
+      const g = Math.round(23 + t * (211 - 23) + (t > 0.7 ? (t - 0.7) * 3.33 * (243 - 211) : 0));
+      const b = Math.round(42 + (1 - t) * (153 - 42));
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+
     if (metricMode === 'grid_co2') {
       // Emerald (clean) to Orange to Dark Red (dirty)
       if (t < 0.5) {
@@ -121,6 +130,9 @@ export const AnnualCostHeatmap: React.FC<Props> = ({
       }
       return { minVal: minP, maxVal: maxP, unit: '€/MWh', modeLabel: 'Grid Wholesale Electricity Price' };
     }
+    if (mode === 'wind_cf') {
+      return { minVal: 0, maxVal: 100, unit: '%', modeLabel: 'Hourly Wind Capacity Factor (2023 MERRA-2)' };
+    }
     // grid_co2
     let minC = Infinity;
     let maxC = -Infinity;
@@ -161,6 +173,7 @@ export const AnnualCostHeatmap: React.FC<Props> = ({
         if (mode === 'optimized_cost') val = hourData.costPerMwh;
         else if (mode === 'grid_price') val = hourData.gridPrice;
         else if (mode === 'grid_co2') val = hourData.gridCo2Intensity * 1000;
+        else if (mode === 'wind_cf') val = hourData.windCapacityFactor * 100;
 
         const x = h * cellW;
         ctx.fillStyle = getColor(val, minVal, maxVal, mode);
@@ -196,6 +209,7 @@ export const AnnualCostHeatmap: React.FC<Props> = ({
         if (mode === 'optimized_cost') val = hourData.costPerMwh;
         else if (mode === 'grid_price') val = hourData.gridPrice;
         else if (mode === 'grid_co2') val = hourData.gridCo2Intensity * 1000;
+        else if (mode === 'wind_cf') val = hourData.windCapacityFactor * 100;
 
         setHoveredCell({
           day,
@@ -208,6 +222,8 @@ export const AnnualCostHeatmap: React.FC<Props> = ({
           gridCo2: hourData.gridCo2Intensity * 1000,
           gridEffCost: hourData.gridEffectiveCost,
           optCost: hourData.costPerMwh,
+          windCF: hourData.windCapacityFactor,
+          windAvail: hourData.windAvailableMw,
         });
       }
     }
@@ -245,12 +261,18 @@ export const AnnualCostHeatmap: React.FC<Props> = ({
     if (!dayData) return null;
 
     const hourlyResults = dayData.hours.map((h) => {
-      const res = solveHourDispatch(h.hour, h.gridPrice, h.gridCo2Intensity * 1000, {
-        demandMw,
-        carbonPrice,
-        technologies,
-        grids,
-      });
+      const res = solveHourDispatch(
+        h.hour,
+        h.gridPrice,
+        h.gridCo2Intensity * 1000,
+        {
+          demandMw,
+          carbonPrice,
+          technologies,
+          grids,
+        },
+        h.windCapacityFactor
+      );
       return {
         label: `${h.hour.toString().padStart(2, '0')}:00`,
         hour: h.hour,
@@ -263,6 +285,8 @@ export const AnnualCostHeatmap: React.FC<Props> = ({
         gridPrice: res.gridPrice,
         gridEffCost: res.gridEffectiveCost,
         costPerMwh: res.avgCostPerMwh,
+        windCF: res.windCapacityFactor,
+        windAvail: res.windAvailableMw,
       };
     });
 
@@ -370,6 +394,14 @@ export const AnnualCostHeatmap: React.FC<Props> = ({
               Optimized Total Cost
             </button>
             <button
+              onClick={() => setMode('wind_cf')}
+              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+                mode === 'wind_cf' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Wind CF (2023)
+            </button>
+            <button
               onClick={() => setMode('grid_price')}
               className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
                 mode === 'grid_price' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
@@ -419,7 +451,7 @@ export const AnnualCostHeatmap: React.FC<Props> = ({
 
               {/* Hover Tooltip Card */}
               {hoveredCell && (
-                <div className="absolute top-3 right-3 bg-slate-900/95 border border-slate-700 p-3 rounded-lg shadow-2xl text-xs font-mono backdrop-blur-sm pointer-events-none min-w-[210px] z-20">
+                <div className="absolute top-3 right-3 bg-slate-900/95 border border-slate-700 p-3 rounded-lg shadow-2xl text-xs font-mono backdrop-blur-sm pointer-events-none min-w-[220px] z-20">
                   <div className="font-bold text-slate-100 border-b border-slate-700 pb-1 mb-1.5 flex justify-between">
                     <span>
                       {hoveredCell.dateLabel} ({hoveredCell.hour.toString().padStart(2, '0')}:00)
@@ -431,6 +463,12 @@ export const AnnualCostHeatmap: React.FC<Props> = ({
                       <span className="text-slate-400">Selected Metric:</span>
                       <span className="font-bold text-amber-400">
                         {hoveredCell.value.toFixed(1)} {unit}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Wind Availability:</span>
+                      <span className="text-emerald-400 font-semibold">
+                        {(hoveredCell.windCF * 100).toFixed(1)}% ({hoveredCell.windAvail?.toFixed(1) ?? '—'} MW)
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -482,6 +520,8 @@ export const AnnualCostHeatmap: React.FC<Props> = ({
                 background:
                   mode === 'grid_co2'
                     ? 'linear-gradient(to right, rgb(16, 185, 129), rgb(234, 179, 8), rgb(239, 68, 68))'
+                    : mode === 'wind_cf'
+                    ? 'linear-gradient(to right, rgb(15, 23, 42), rgb(52, 211, 153), rgb(243, 232, 255))'
                     : 'linear-gradient(to right, rgb(30, 20, 70), rgb(20, 120, 220), rgb(14, 180, 180), rgb(245, 158, 11), rgb(239, 68, 68))',
               }}
             />

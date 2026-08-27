@@ -22,6 +22,7 @@ export interface HourlyRecord {
   Season: string;
   CO2_Intensity: number; // in gCO2/kWh (kgCO2/MWh)
   Price: number; // in €/MWh
+  Wind_Capacity_Factor: number; // Hourly onshore capacity factor [0-1]
 }
 
 export interface HourDispatchResult {
@@ -31,6 +32,8 @@ export interface HourDispatchResult {
   gridCo2Intensity: number; // in tCO2/MWh
   gridEffectiveCost: number; // in €/MWh
   gridImport: number; // MW
+  windCapacityFactor?: number; // Hourly wind capacity factor used
+  windAvailableMw?: number; // Wind MW available = Installed * CF
   generation: Record<string, number>; // MW per technology
   totalGeneration: number; // MW
   totalCost: number; // € for this hour

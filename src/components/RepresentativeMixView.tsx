@@ -66,6 +66,8 @@ export const RepresentativeMixView: React.FC<Props> = ({
       gridPrice: r.gridPrice,
       gridCo2: r.gridCo2Intensity,
       gridEffCost: r.gridEffectiveCost,
+      windCF: r.windCapacityFactor,
+      windAvail: r.windAvailableMw,
       totalCost: r.totalCost,
       costPerMwh: r.avgCostPerMwh,
     }));
@@ -165,6 +167,14 @@ export const RepresentativeMixView: React.FC<Props> = ({
                             })}
                         </div>
                         <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 space-y-0.5">
+                          {data.windCF !== undefined && (
+                            <div className="flex justify-between">
+                              <span className="text-emerald-400">Wind CF (Hourly Avail):</span>
+                              <span className="font-mono text-emerald-300 font-semibold">
+                                {(data.windCF * 100).toFixed(1)}% ({data.windAvail?.toFixed(1) ?? '—'} MW)
+                              </span>
+                            </div>
+                          )}
                           <div className="flex justify-between">
                             <span>Grid Market Price:</span>
                             <span className="font-mono text-slate-300">€{data.gridPrice.toFixed(1)}/MWh</span>
@@ -373,8 +383,9 @@ export const RepresentativeMixView: React.FC<Props> = ({
                     <th className="py-2 px-3 text-right">Grid Price (€/MWh)</th>
                     <th className="py-2 px-3 text-right">Grid CO2 (t/MWh)</th>
                     <th className="py-2 px-3 text-right">Grid Eff. Cost</th>
-                    <th className="py-2 px-3 text-right">Grid Import (MW)</th>
+                    <th className="py-2 px-3 text-right">Wind CF</th>
                     <th className="py-2 px-3 text-right">Wind (MW)</th>
+                    <th className="py-2 px-3 text-right">Grid Import (MW)</th>
                     <th className="py-2 px-3 text-right">Gas Turbine (MW)</th>
                     <th className="py-2 px-3 text-right">Biomass (MW)</th>
                     <th className="py-2 px-3 text-right">Hourly Cost (€)</th>
@@ -389,10 +400,13 @@ export const RepresentativeMixView: React.FC<Props> = ({
                       <td className="py-2 px-3 text-right text-sky-400 font-semibold">
                         €{r.gridEffectiveCost.toFixed(2)}
                       </td>
-                      <td className="py-2 px-3 text-right text-sky-300 font-bold">{r.gridImport.toFixed(1)}</td>
-                      <td className="py-2 px-3 text-right text-emerald-400">
+                      <td className="py-2 px-3 text-right text-emerald-300 font-mono">
+                        {r.windCapacityFactor !== undefined ? `${(r.windCapacityFactor * 100).toFixed(1)}%` : '—'}
+                      </td>
+                      <td className="py-2 px-3 text-right text-emerald-400 font-bold">
                         {(r.generation['Wind'] || 0).toFixed(1)}
                       </td>
+                      <td className="py-2 px-3 text-right text-sky-300 font-bold">{r.gridImport.toFixed(1)}</td>
                       <td className="py-2 px-3 text-right text-amber-400">
                         {(r.generation['Gas turebine'] || 0).toFixed(1)}
                       </td>
