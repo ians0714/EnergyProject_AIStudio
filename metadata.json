@@ -1,0 +1,6 @@
+{
+  "name": "Data Center Energy Supply Optimization",
+  "description": "Hourly cost optimization and 24-hour supply mix analysis for data center electricity supply",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
