@@ -27,7 +27,22 @@
 
 ---
 
-## 2. Gas Turbine Fill Color Visualization Fix
+## 2. Dataset Formatting and Build Compilation Fix
+
+### What was changed
+- Reconstructed and properly formatted `/src/data/energyDataset.ts` as valid, clean UTF-8 text with formatted array items and aligned `GridParam` property types (`time`, `grid_carbon_intensity_tco2_mwh`).
+- Verified TypeScript compilation and production build (`tsc && vite build`).
+
+### Files modified
+- `/src/data/energyDataset.ts`
+- `/AI_STUDIO_CHANGES.md`
+
+### Why the change was needed
+- A previous binary serialization had left corrupted/truncated bytes in `energyDataset.ts`, causing TypeScript compile errors TS1490 and TS1002 during production build.
+
+---
+
+## 3. Gas Turbine Fill Color Visualization Fix
 
 ### What was changed
 1. **SVG Gradient ID Sanitization**: Sanitized gradient IDs in `RepresentativeMixView.tsx` by replacing whitespace and special characters with alphanumeric underscores (e.g., `grad-${profileType}-${safeKey}`) for both `<linearGradient id=...>` definitions and `<Area fill="url(#...)" />` references.

@@ -76,7 +76,7 @@ export default function App() {
               }`}
             >
               <Layers className="w-4 h-4" />
-              Representative 24h Energy Mix
+              Hourly Supply Mix (Day / Month / Season / Year)
             </button>
 
             <button

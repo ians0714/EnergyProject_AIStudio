@@ -65,6 +65,7 @@ export const DataExplorerView: React.FC<Props> = ({
       'Season',
       'Grid_Price_EUR_MWh',
       'Grid_CO2_g_kWh',
+      'Wind_Capacity_Factor',
       'Grid_Effective_Cost_EUR_MWh',
       'Grid_Import_MW',
       'Wind_MW',
@@ -75,12 +76,18 @@ export const DataExplorerView: React.FC<Props> = ({
     ];
 
     const rows = filteredData.map((r) => {
-      const dispatch = solveHourDispatch(r.Hour, r.Price, r.CO2_Intensity, {
-        demandMw,
-        carbonPrice,
-        technologies,
-        grids,
-      });
+      const dispatch = solveHourDispatch(
+        r.Hour,
+        r.Price,
+        r.CO2_Intensity,
+        {
+          demandMw,
+          carbonPrice,
+          technologies,
+          grids,
+        },
+        r.Wind_Capacity_Factor
+      );
 
       return [
         r.Timestamp,
@@ -90,6 +97,7 @@ export const DataExplorerView: React.FC<Props> = ({
         r.Season,
         r.Price.toFixed(2),
         r.CO2_Intensity.toFixed(1),
+        r.Wind_Capacity_Factor.toFixed(3),
         dispatch.gridEffectiveCost.toFixed(2),
         dispatch.gridImport.toFixed(2),
         (dispatch.generation['Wind'] || 0).toFixed(2),
@@ -207,10 +215,12 @@ export const DataExplorerView: React.FC<Props> = ({
                 <th className="py-2.5 px-2">Season</th>
                 <th className="py-2.5 px-3 text-right">Grid Price</th>
                 <th className="py-2.5 px-3 text-right">Grid CO2</th>
+                <th className="py-2.5 px-3 text-right text-emerald-400">Wind CF</th>
                 <th className="py-2.5 px-3 text-right">Grid Eff. Cost</th>
                 <th className="py-2.5 px-3 text-right text-sky-400">Grid (MW)</th>
                 <th className="py-2.5 px-3 text-right text-emerald-400">Wind (MW)</th>
                 <th className="py-2.5 px-3 text-right text-amber-400">Gas (MW)</th>
+                <th className="py-2.5 px-3 text-right text-stone-400">Coal (MW)</th>
                 <th className="py-2.5 px-3 text-right text-lime-400">Biomass (MW)</th>
                 <th className="py-2.5 px-3 text-right text-amber-300 font-bold">Total Cost (€)</th>
                 <th className="py-2.5 px-3 text-right text-emerald-300">Cost/MWh</th>
@@ -218,12 +228,18 @@ export const DataExplorerView: React.FC<Props> = ({
             </thead>
             <tbody className="divide-y divide-slate-800/50">
               {currentPageData.map((r, idx) => {
-                const dispatch = solveHourDispatch(r.Hour, r.Price, r.CO2_Intensity, {
-                  demandMw,
-                  carbonPrice,
-                  technologies,
-                  grids,
-                });
+                const dispatch = solveHourDispatch(
+                  r.Hour,
+                  r.Price,
+                  r.CO2_Intensity,
+                  {
+                    demandMw,
+                    carbonPrice,
+                    technologies,
+                    grids,
+                  },
+                  r.Wind_Capacity_Factor
+                );
 
                 return (
                   <tr key={idx} className="hover:bg-slate-800/40">
@@ -231,6 +247,7 @@ export const DataExplorerView: React.FC<Props> = ({
                     <td className="py-2 px-2 text-slate-400 font-sans text-[11px]">{r.Season}</td>
                     <td className="py-2 px-3 text-right text-slate-300">€{r.Price.toFixed(2)}</td>
                     <td className="py-2 px-3 text-right text-slate-400">{r.CO2_Intensity.toFixed(0)} g</td>
+                    <td className="py-2 px-3 text-right text-emerald-400 font-bold">{r.Wind_Capacity_Factor.toFixed(3)}</td>
                     <td className="py-2 px-3 text-right text-sky-400 font-semibold">
                       €{dispatch.gridEffectiveCost.toFixed(2)}
                     </td>
@@ -242,6 +259,9 @@ export const DataExplorerView: React.FC<Props> = ({
                     </td>
                     <td className="py-2 px-3 text-right text-amber-400">
                       {(dispatch.generation['Gas turebine'] || 0).toFixed(1)}
+                    </td>
+                    <td className="py-2 px-3 text-right text-stone-400">
+                      {(dispatch.generation['Coal'] || 0).toFixed(1)}
                     </td>
                     <td className="py-2 px-3 text-right text-lime-400">
                       {(dispatch.generation['Biomass'] || 0).toFixed(1)}
